@@ -7,8 +7,13 @@ from PyQt5.QtGui import QIcon
 from PyQt5.uic import loadUi
 from matplotlib.backends.backend_qt5agg import (NavigationToolbar2QT as NavigationToolbar)
 import numpy as np
+import ntpath
 import sys
 import calibKiD as cK
+
+def path_leaf(path):
+    head, tail = ntpath.split(path)
+    return tail or ntpath.basename(head)
 
 class MatplotlibWidget(QMainWindow):
     
@@ -18,11 +23,11 @@ class MatplotlibWidget(QMainWindow):
 
         loadUi(appctxt.get_resource("qt_designer.ui"),self)
         #loadUi('qt_designer.ui',self)
-        self.setWindowTitle("VNA Scan Viewer 0.1b")
+        self.setWindowTitle("VNA Scan Viewer For KIDs")
         self.setWindowIcon(QIcon(appctxt.get_resource("icon.png")))
         
         self.pushButton_generate_random_signal.setEnabled(False)
-        self.fitButton.setEnabled(False)
+        self.fitButton.setEnabled(True)
         self.headerButton.setEnabled(False)
         self.browseI.setEnabled(False)
         self.browseQ.setEnabled(False)
@@ -39,15 +44,27 @@ class MatplotlibWidget(QMainWindow):
         
         self.clearButton.clicked.connect(self.clear_graph)
         
+        #self.labelTone.editingFinished.connect(self.check_enable)
+        #self.fnameCalib.textChanged.connect(self.check_enable)
+        
         self.fcalib = None
         self.Icalib = None
         self.Qcalib = None
         self.tone = None
-        self.run_number = None
+        self.run_number = None 
         
-        #self.MplWidget.canvas.axes.patch.set_visible(False)
-        #self.MplWidget.canvas.setStyleSheet("background-color:transparent;")
-        #self.MplWidget.canvas.draw()
+        self.watchdog = False
+              
+
+#    def check_enable(self):
+#        
+#        if self.fnameCalib.text() != "" and self.labelTone.text() != "":
+#            self.tone = np.float32(self.labelTone.text())
+#            self.enable_fit(self.fitButton)
+#            
+#    def enable_fit(self,Button):
+#        Button.setEnabled(True)
+        
 
     def load_header(self):
         params = cK.get_info(self.fnameHead.text(),self.fnameCalib.text())
@@ -55,10 +72,10 @@ class MatplotlibWidget(QMainWindow):
         self.tone = params[6]
         self.labelRun.setText(self.run_number)
         
-        str_tone = '%03d'% self.tone
+        str_tone = '%.0f'% self.tone
         self.labelTone.setText(str_tone)
-        self.fitButton.setEnabled(True) 
-
+        #self.check_enable(self)
+        
     def browse(self):
         options = QFileDialog.Options()
         fileName, _ = QFileDialog.getOpenFileName(self,"QFileDialog.getOpenFileName()", "","Text Files (*.txt);;Binary Files (*.bin);;All Files (*)", options=options)
@@ -75,6 +92,7 @@ class MatplotlibWidget(QMainWindow):
             else :
                 self.fnameHead.setText(fileName)
                 self.headerButton.setEnabled(True)
+                #self.check_enable(self)
                 
     def clear_graph(self):
         self.MplWidget.canvas.axes.clear()
@@ -87,7 +105,11 @@ class MatplotlibWidget(QMainWindow):
     def update_graph(self):
 
         fname = self.fnameCalib.text()
+        runName = path_leaf(fname)[4:11:]
+        self.labelRun.setText(runName)
+        
         data = np.genfromtxt(fname,comments="%")
+        
         
         f = data[::,0]
         I = data[::,1]
@@ -96,6 +118,11 @@ class MatplotlibWidget(QMainWindow):
         self.fcalib = f
         self.Icalib = I
         self.Qcalib = Q
+        
+        normS21 = np.sqrt(I**2+Q**2)
+        self.tone = f[np.argmin(normS21)]
+        
+        self.labelTone.setText('%.0f'% self.tone)
         
         #self.MplWidget.canvas.axes.clear()
         self.MplWidget.canvas.axes.plot(I, Q, marker='o',color='k',alpha=.3,ls='',ms=5)
@@ -106,7 +133,7 @@ class MatplotlibWidget(QMainWindow):
         self.MplWidget.canvas.draw()
         
         #self.MplWidget_2.canvas.axes.clear()
-        self.MplWidget_2.canvas.axes.plot(f,np.sqrt(I**2+Q**2), marker='o',color='k',alpha=.3,ls='',ms=5)
+        self.MplWidget_2.canvas.axes.plot(f,normS21, marker='o',color='k',alpha=.3,ls='',ms=5)
         self.MplWidget_2.canvas.axes.set_title('Resonance')
         self.MplWidget_2.canvas.draw()
         
@@ -117,10 +144,14 @@ class MatplotlibWidget(QMainWindow):
         
     def add_fit(self):
         if self.Icalib is None or self.tone is None:
-            print("No data to fit")
-        else:            
+            if not self.watchdog:
+                self.update_graph()
+                self.add_fit()
+                self.watchdog = True
+        else:      
             #print('plot fit')
-            
+            self.tone = np.float32(self.labelTone.text())
+            self.labelTone.setText('%.0f'% self.tone)
             # f,I,Q,tone = fIQ
             params = cK.fit_S21_model([self.fcalib,self.Icalib,self.Qcalib,self.tone])
             [fr,Qc,Ql,phi0,tau,a,alpha,Pz,Rz,offset,xc,yc,r] = params

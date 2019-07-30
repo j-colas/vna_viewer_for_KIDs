@@ -1,0 +1,6 @@
+{
+    "app_name": "vna_viewer_4KIDs",
+    "author": "Jules Colas",
+    "main_module": "src/main/python/main.py",
+    "version": "0.0.0"
+}

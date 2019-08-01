@@ -29,8 +29,9 @@ class MatplotlibWidget(QMainWindow):
         self.pushButton_generate_random_signal.setEnabled(False)
         self.fitButton.setEnabled(True)
         self.headerButton.setEnabled(False)
-        self.browseI.setEnabled(False)
-        self.browseQ.setEnabled(False)
+        #self.browseI.setEnabled(False)
+        #self.browseQ.setEnabled(False)
+        self.IQButton.setEnabled(False)
         self.pushButton_generate_random_signal.clicked.connect(self.update_graph)
         self.fitButton.clicked.connect(self.add_fit)
         self.headerButton.clicked.connect(self.load_header)
@@ -38,12 +39,15 @@ class MatplotlibWidget(QMainWindow):
         
        
         self.browseCalib.clicked.connect(self.browse)
-        self.browseI.clicked.connect(self.browse)
-        self.browseQ.clicked.connect(self.browse)
         self.browseHead.clicked.connect(self.browse)
+        self.browseI.clicked.connect(self.browseBin)
+        self.browseQ.clicked.connect(self.browseBin)
         
         self.clearButton.clicked.connect(self.clear_graph)
         
+        self.fnameI.textChanged.connect(self.check_IQload)
+        self.fnameQ.textChanged.connect(self.check_IQload)
+        self.IQButton.clicked.connect(self.IQload)
         #self.labelTone.editingFinished.connect(self.check_enable)
         #self.fnameCalib.textChanged.connect(self.check_enable)
         
@@ -54,6 +58,10 @@ class MatplotlibWidget(QMainWindow):
         self.run_number = None 
         
         self.watchdog = False
+        
+        self.Idata = None
+        self.Qdata = None
+        self.Nmax = 10000
               
 
 #    def check_enable(self):
@@ -64,7 +72,26 @@ class MatplotlibWidget(QMainWindow):
 #            
 #    def enable_fit(self,Button):
 #        Button.setEnabled(True)
+    def IQload(self):
+        fnameId = self.fnameI.text() 
+        fnameQd = self.fnameQ.text()
         
+        # find pulses
+        # find noise
+        self.Idata = np.memmap(fnameId,dtype=np.int16,mode='r')[:self.Nmax]
+        self.Qdata = np.memmap(fnameQd,dtype=np.int16,mode='r')[:self.Nmax]
+        Ipulse = np.memmap(fnameId,dtype=np.int16,mode='r')
+        Ipulse = Ipulse[np.argmax(Ipulse)-self.Nmax:np.argmax(Ipulse)+self.Nmax]
+        Qpulse = np.memmap(fnameQd,dtype=np.int16,mode='r')
+        Qpulse = Qpulse[np.argmax(Qpulse)-self.Nmax:np.argmax(Qpulse)+self.Nmax]
+        self.MplWidget.canvas.axes.plot(self.Idata,self.Qdata, marker='o',mec='k',mfc='orchid',alpha=.1,ls='',ms=7)
+        self.MplWidget.canvas.axes.plot(Ipulse,Qpulse, marker='o',mec='k',mfc='yellow',alpha=.1,ls='',ms=7)
+        self.MplWidget.canvas.draw()
+        
+        
+    def check_IQload(self):
+        if self.fnameI.text() != "" and self.fnameQ.text() != "":
+            self.IQButton.setEnabled(True)
 
     def load_header(self):
         params = cK.get_info(self.fnameHead.text(),self.fnameCalib.text())
@@ -78,21 +105,29 @@ class MatplotlibWidget(QMainWindow):
         
     def browse(self):
         options = QFileDialog.Options()
-        fileName, _ = QFileDialog.getOpenFileName(self,"QFileDialog.getOpenFileName()", "","Text Files (*.txt);;Binary Files (*.bin);;All Files (*)", options=options)
+        fileName, _ = QFileDialog.getOpenFileName(self,"QFileDialog.getOpenFileName()", "","Text Files (*.txt);;All Files (*)", options=options)
         sender = self.sender()
         if fileName:
             print(fileName)
             if sender == self.browseCalib:
                 self.fnameCalib.setText(fileName)
                 self.pushButton_generate_random_signal.setEnabled(True)
-            elif sender == self.browseI:
-                self.fnameI.setText(fileName)
-            elif sender == self.browseQ:
-                self.fnameQ.setText(fileName)
             else :
                 self.fnameHead.setText(fileName)
                 self.headerButton.setEnabled(True)
-                #self.check_enable(self)
+
+                
+    def browseBin(self):
+        options = QFileDialog.Options()
+        fileName, _ = QFileDialog.getOpenFileName(self,"QFileDialog.getOpenFileName()", "","Binary Files (*.bin);;All Files (*)", options=options)
+        sender = self.sender()
+        if fileName:
+            print(fileName)
+            if sender == self.browseI:
+                self.fnameI.setText(fileName)
+            else :
+                self.fnameQ.setText(fileName)
+            
                 
     def clear_graph(self):
         self.MplWidget.canvas.axes.clear()
